@@ -31,7 +31,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000
 
 app.get('/', (req, res) => {
-    res.send('Welcome to the Expense Tracker API')
+    res.send('Welcome to the Finance System API')
 })
 
 const startServer = async () => {

@@ -26,15 +26,33 @@ A REST API built with Node.js, Express, and MongoDB for a finance dashboard syst
 
 ## Environment Variables
 
-Create a `.env` file with the following variables:
+Create a `.env` file with the following variables (see `.env.example`):
 
 ```text
 PORT=5000
-MONGO_URI=mongodb://localhost:27017/finance-db
-JWT_SECRET=your_jwt_secret
+MONGO_URI=your_mongodb_connection_string  # Use MongoDB Atlas for production
+JWT_SECRET=your_super_secret_jwt_key_here_make_it_long_and_secure
 ```
 
-## Project Structure
+## Deployment to Render
+
+Your Render service failed because Publish Directory was set to "npm start" (which is the Start Command, not a directory).
+
+**Fix in Render Dashboard:**
+1. Build Command: (leave **empty**)
+2. Start Command: `npm start`
+3. Publish Directory: (leave **empty**) - serves from root
+
+**Environment Variables in Render:**
+```
+MONGO_URI  # MongoDB Atlas URI (e.g., mongodb+srv://...)
+JWT_SECRET # Strong secret key
+```
+
+**Common Error:** "Publish directory npm start does not exist!" → Clear Publish Directory.
+
+After changes, redeploy (connect GitHub repo if not already).
+
 
 - `/config` - Database configuration and connection setup
 - `/controllers` - Request handlers for business logic
