@@ -1,51 +1,40 @@
 const User = require('../models/userModel');
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 
+// admin creates user account
 const createUserByAdmin = async (req, res) => {
     try {
-
-        const { username, email, password, role } = req.body;   
+        const { username, email, password, role } = req.body;
 
         const userRole = role || 'analyst';
 
-        const existingUser = await User.findOne({ email });
+        // check email not taken
+        const existing = await User.findOne({ email });
+        if (existing) return res.status(400).json({ message: 'Email taken' });
 
-        if (existingUser) {
-            return res.status(400).json({ message: 'Email already exists' });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPass = await bcrypt.hash(password, 10);
 
         const newUser = new User({
-            username,
-            email,
-            password: hashedPassword,
-            role: userRole,
-            isActive: true,
-            createdAt: Date.now()
+            username, email, password: hashedPass,
+            role: userRole, isActive: true
         });
 
         await newUser.save();
 
-        return res.status(201).json({ message: 'User created successfully' });  
-
+        res.status(201).json({ message: 'User created' });
     } catch (error) {
-
-        console.error('Error creating user:', error);
-
-        return res.status(500).json({ message: 'Internal server error' });
-        
+        console.log('Create user error:', error);
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
+// get users list with pagination
 const getAllUsers = async (req, res) => {
     try {
         const { page = 1, limit = 10 } = req.query;
-
-        const pageNumber = parseInt(page, 10) || 1;
-        const pageSize = parseInt(limit, 10) || 10;
-        const skip = (pageNumber - 1) * pageSize;
+        const pageNum = parseInt(page) || 1;
+        const pageSize = parseInt(limit) || 10;
+        const skip = (pageNum - 1) * pageSize;
 
         const total = await User.countDocuments();
         const users = await User.find({}, 'username email role isActive createdAt')
@@ -53,55 +42,56 @@ const getAllUsers = async (req, res) => {
             .limit(pageSize);
 
         res.status(200).json({
-            data: users,
-            total,
-            page: pageNumber,
+            data: users, total, page: pageNum,
             totalPages: Math.ceil(total / pageSize)
         });
     } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        console.log('Users list error:', error);
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
+// update role (cannot self-modify)
 const updateUserRole = async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
 
+    // prevent self role change
     if (req.user._id.toString() === id) {
-        return res.status(403).json({ message: 'You cannot modify your own account' });
+        return res.status(403).json({ message: 'Cannot change own role' });
     }
 
     try {
         const user = await User.findByIdAndUpdate(id, { role }, { new: true });
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        res.status(200).json({ message: 'Role updated successfully', user });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        res.status(200).json({ message: 'Role updated', user });
     } catch (error) {
-        console.error('Error updating role:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        console.log('Role error:', error);
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
+// toggle user active status
 const updateUserStatus = async (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body;
 
+    // prevent self status change
     if (req.user._id.toString() === id) {
-        return res.status(403).json({ message: 'You cannot modify your own account' });
+        return res.status(403).json({ message: 'Cannot change own status' });
     }
 
     try {
         const user = await User.findByIdAndUpdate(id, { isActive }, { new: true });
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        res.status(200).json({ message: 'Status updated successfully', user });
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        res.status(200).json({ message: 'Status updated', user });
     } catch (error) {
-        console.error('Error updating status:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        console.log('Status error:', error);
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
-module.exports = { createUserByAdmin, getAllUsers, updateUserRole, updateUserStatus }; 
+module.exports = { createUserByAdmin, getAllUsers, updateUserRole, updateUserStatus };
+

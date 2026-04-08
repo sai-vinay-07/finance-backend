@@ -1,14 +1,13 @@
-
-
+// check if user role allows access
 const roleMiddleware = (allowedRoles) => {
     return (req, res, next) => {
-        const userRole = req.user.role;
-        if (allowedRoles.includes(userRole)) {
+        if (allowedRoles.includes(req.user.role)) {
             next();
         } else {
-            return res.status(403).json({ message: "Forbidden: Insufficient permissions" });
+            res.status(403).json({ message: 'Access denied wrong role' });
         }
     };
 };
 
 module.exports = roleMiddleware;
+

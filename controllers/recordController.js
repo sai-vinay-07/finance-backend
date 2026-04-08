@@ -1,48 +1,42 @@
-const express = require('express');
 const Record = require('../models/financelRecords');
 
-const createRecord = async(req,res) => {
-try {
-      const { amount, type, category, date, notes } = req.body;
+// create new financial record
+const createRecord = async (req, res) => {
+    try {
+        const { amount, type, category, date, notes } = req.body;
 
-        const newRecord = new Record({  
-            amount,
-            type,
-            category,
-            date,
-            notes,
+        const newRecord = new Record({
+            amount, type, category, date, notes,
             user: req.user._id,
             isDeleted: false,
             createdAt: Date.now()
-         })
+        });
 
-         await newRecord.save();
+        await newRecord.save();
 
-         return res.status(201).json({ message: 'Record created successfully' });
+        res.status(201).json({ message: 'Record created successfully' });
+    } catch (error) {
+        console.error('Create record error:', error);
+        res.status(500).json({ message: 'Server error creating record' });
+    }
+};
 
-} catch (error) {
-    
-    console.error('Error creating record:', error);
-
-    return res.status(500).json({ message: 'Internal server error' });
-
-}
-}
-
-const getRecords = async(req,res) => {
+// get records with optional filters and pagination
+const getRecords = async (req, res) => {
     try {
         const { startDate, endDate, category, type, page = 1, limit = 10 } = req.query;
 
-        // Validate dates
         if (startDate && isNaN(new Date(startDate).getTime())) {
-            return res.status(400).json({ message: 'Invalid startDate format' });
+            return res.status(400).json({ message: 'Invalid startDate' });
         }
         if (endDate && isNaN(new Date(endDate).getTime())) {
-            return res.status(400).json({ message: 'Invalid endDate format' });
+            return res.status(400).json({ message: 'Invalid endDate' });
         }
 
+        // build query for user's active records
         let query = { user: req.user._id, isDeleted: false };
 
+        // add date range filter
         if (startDate || endDate) {
             query.date = {};
             if (startDate) query.date.$gte = new Date(startDate);
@@ -51,9 +45,9 @@ const getRecords = async(req,res) => {
         if (category) query.category = category;
         if (type) query.type = type;
 
-        const pageNumber = Math.max(1, parseInt(page, 10) || 1);
-        const pageSize = parseInt(limit, 10) || 10;
-        const skip = (pageNumber - 1) * pageSize;
+        const pageNum = Math.max(1, parseInt(page));
+        const pageSize = parseInt(limit) || 10;
+        const skip = (pageNum - 1) * pageSize;
 
         const total = await Record.countDocuments(query);
         const records = await Record.find(query)
@@ -61,95 +55,70 @@ const getRecords = async(req,res) => {
             .skip(skip)
             .limit(pageSize);
 
-        return res.status(200).json({
+        res.status(200).json({
             data: records,
-            total,
-            page: pageNumber,
+            total, page: pageNum,
             totalPages: Math.ceil(total / pageSize)
         });
-
     } catch (error) {
-        
-        console.error('Error fetching records:', error);
-
-        return res.status(500).json({ message: 'Internal server error' });
-
+        console.error('Get records error:', error);
+        res.status(500).json({ message: 'Server error getting records' });
     }
-}
+};
 
-const updateRecord = async(req,res) => {    
-
-    const { id } = req.params;
-
-    const { amount, type, category, date, notes } = req.body;
-
+// update record if user owns it or admin
+const updateRecord = async (req, res) => {
     try {
+        const { id } = req.params;
+        const updates = req.body;
+
         const record = await Record.findById(id);
 
-        if (!record) {
-            return res.status(404).json({ message: 'Record not found' });
-        }
+        if (!record) return res.status(404).json({ message: 'Record not found' });
+        if (record.isDeleted) return res.status(400).json({ message: 'Record deleted already' });
 
-        if (record.isDeleted) {
-            return res.status(400).json({ message: 'Record is already deleted' });
-        }
-
+        // admin or owner only
         if (record.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Unauthorized' });
-        }           
+            return res.status(403).json({ message: 'Not authorized' });
+        }
 
-        record.amount = amount !== undefined ? amount : record.amount;
-        record.type = type !== undefined ? type : record.type;
-        record.category = category !== undefined ? category : record.category;
-        record.date = date !== undefined ? date : record.date;
-        record.notes = notes !== undefined ? notes : record.notes;
+        // update provided fields
+        Object.keys(updates).forEach(key => {
+            record[key] = updates[key];
+        });
 
         await record.save();
-
-        return res.status(200).json({ message: 'Record updated successfully' });
-
+        res.status(200).json({ message: 'Record updated' });
     } catch (error) {
-        
-        console.error('Error updating record:', error);
-
-        return res.status(500).json({ message: 'Internal server error' });
-
+        console.error('Update error:', error);
+        res.status(500).json({ message: 'Server error updating' });
     }
+};
 
-}
-
-const deleteRecord = async(req,res) => {
-
-    const { id } = req.params;
-
+// soft delete - set flag only
+const deleteRecord = async (req, res) => {
     try {
+        const { id } = req.params;
+
         const record = await Record.findById(id);
-        
-        if (!record) {
-            return res.status(404).json({ message: 'Record not found' });
-        }
 
-        if (record.isDeleted) {
-            return res.status(400).json({ message: 'Record is already deleted' });
-        }
+        if (!record) return res.status(404).json({ message: 'Not found' });
+        if (record.isDeleted) return res.status(400).json({ message: 'Already deleted' });
 
+        // admin or owner
         if (record.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Unauthorized' });
+            return res.status(403).json({ message: 'Not authorized' });
         }
 
         record.isDeleted = true;
         await record.save();
 
-        return res.status(200).json({ message: 'Record deleted successfully' });
-
+        res.status(200).json({ message: 'Deleted successfully' });
     } catch (error) {
-        
-        console.error('Error deleting record:', error);
-
-        return res.status(500).json({ message: 'Internal server error' });
-
+        console.error('Delete error:', error);
+        res.status(500).json({ message: 'Server error deleting' });
     }
+};
 
-}
+module.exports = { createRecord, getRecords, updateRecord, deleteRecord };
 
-module.exports = { createRecord, getRecords, updateRecord, deleteRecord }
